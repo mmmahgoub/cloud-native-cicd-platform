@@ -1,0 +1,8 @@
+# Build and push image manually (if needed)
+docker build -t ghcr.io/YOUR_USERNAME/cloud-native-cicd-platform:local .
+docker push ghcr.io/YOUR_USERNAME/cloud-native-cicd-platform:local
+
+# Apply namespace, deployment and service
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml

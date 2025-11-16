@@ -1,0 +1,82 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }} # owner/repo
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: app
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: app
+        run: |
+          pytest
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t $REGISTRY/${IMAGE_NAME}:${IMAGE_TAG} .
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Push Docker image
+        run: |
+          docker push $REGISTRY/${IMAGE_NAME}:${IMAGE_TAG}
+
+  deploy-dev:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          # Replace with your own method (OIDC, AWS IAM, etc.)
+          echo "${{ secrets.KUBECONFIG_CONTENTS }}" > kubeconfig
+          export KUBECONFIG=$PWD/kubeconfig
+
+      - name: Set image tag in k8s manifest
+        run: |
+          IMAGE=$REGISTRY/${IMAGE_NAME}:${{ github.sha }}
+          sed -i "s|ghcr.io/YOUR_USERNAME/cloud-native-cicd-platform:latest|$IMAGE|g" k8s/deployment.yaml
+
+      - name: Apply Kubernetes manifests
+        run: |
+          export KUBECONFIG=$PWD/kubeconfig
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
