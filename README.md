@@ -50,3 +50,6 @@ See [`.github/workflows/ci-cd.yaml`](.github/workflows/ci-cd.yaml) for full pipe
 cd app
 pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+
+.
